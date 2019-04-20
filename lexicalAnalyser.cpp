@@ -10,14 +10,15 @@
 #include <set> 
 using namespace std;
 
-int cont,coluna, linha;
+int cont,coluna, linha, last=0, bug=0;
 string buffer;
 
 void fail() {
-  cout<<"ARQUIVO INVALIDO\n";
+  cout<<"ARQUIVO INVALIDO"<<endl;
 }
 
 void erro() {
+  bug=1;
   cout << linha << " " <<coluna << endl;
 }
 
@@ -31,14 +32,15 @@ void retract() {
 void verificaLinha() {
   int verifica = (int)buffer[cont];
   if (verifica==10) {
+    last = coluna;
     linha++;
     coluna=0;
   }
 }
 
 int main() {
-  int i, state=0,r=32; bool flag = false;
-  coluna = -1;
+  int i, state=0,r=32; bool flag = false, abriu=false, fechou=false;
+  coluna = 0;
   cont = -1; linha =1;
   FILE *fp; char cy;
   fp = fopen("test.txt","r");
@@ -53,26 +55,33 @@ int main() {
   vector< pair<int,string> > TOKENS;
   vector< pair<int,string> >:: iterator it; // 0/reservada, 1/id, 2/num
   string s;
-
+  bool arqv_inv = false, ok = false;
   while(!feof(fp)) {
     fscanf(fp,"%c",&cy);
     int tabela = (int)cy;
     if (range.count(tabela) <= 0) {
-      fail();
-      state=-1;
-      break;
-    }
+        arqv_inv = true;
+      }
     else
       buffer.push_back(cy);
   }
-
-  buffer.resize(buffer.size()-1);
+  if (buffer.size()== 0) {
+      cout<<"OK"<<endl;
+      ok= true;
+  }
+  else {
+    if (arqv_inv== true) {
+      fail();
+    }
+    else {
+        buffer.resize(buffer.size()-1);
   while (cont != buffer.size()) {
     if (state==-1) break;
     switch (state) {
       case 0: 
          {
-          getNextChar();  
+          getNextChar();
+          int temp = int(buffer[cont]);  
          if (isalpha(buffer[cont]) != 0){
            s.push_back(buffer[cont]);
            if (cont == buffer.size()-1) {
@@ -204,6 +213,7 @@ int main() {
            s.clear();
          }
          else if (buffer[cont]=='"'){
+            //abriu = true;
             if (cont == buffer.size()-1) {
               erro();
               s.clear();
@@ -232,19 +242,17 @@ int main() {
           else
            state = 5;
          }
+         else if (temp == 32 || temp == 10 || temp == 9){
+              verificaLinha();
+              state= 6;  
+            } 
          else {
-          int temp = int(buffer[cont]);
-          if(temp == 32 || temp == 10 || temp == 9) {
-            verificaLinha();
-            state= 6;
-          }   
-          else if(cont < buffer.size()-1) {
-            cout <<"nao esquecer colunas e linhas" << endl;
-            state =0;
-          }  
-          else 
-            break;
-         }
+            if(cont < buffer.size()) {
+              erro(); state=0;
+            }
+            else
+              break;   
+          }     
        }break;
 
      case 1: //identificador
@@ -319,7 +327,7 @@ int main() {
           TOKENS.push_back(make_pair(0,s)); state = 0; s.clear(); retract();
         }
       }break;
-      case 4: // multiplicação ou potencia
+      case 4: // multiplicaÃ§Ã£o ou potencia
       {
         getNextChar();
         if(buffer[cont]=='*') {
@@ -357,11 +365,12 @@ int main() {
           s.clear(); retract();
         }
       }break;
-      case 6: // tratando espaço, tab e quebra de linha
+      case 6: // tratando espaÃ§o, tab e quebra de linha
       {
         //cout<<"estado 6"<<endl;
         getNextChar();
-        if(buffer[cont]==' ')
+        int temp2 = int(buffer[cont]);
+        if(temp2 ==32 || temp2 == 10 || temp2==9)
           state = 6;
         else {
           state = 0;
@@ -369,7 +378,7 @@ int main() {
         }
    
       }break;
-      case 7:
+      case 7: // virgula
       {
         getNextChar();
         if (buffer[cont]=='0' || buffer[cont]=='1' || buffer[cont]=='2' || buffer[cont]=='3' || buffer[cont]=='4' || buffer[cont]=='5' || buffer[cont]=='6' || buffer[cont]=='7' || buffer[cont]=='8' || buffer[cont]=='9') {
@@ -383,36 +392,52 @@ int main() {
               state = 7; s.push_back(buffer[cont]);
             }     
         }
-        else if (buffer[cont]==',') {
-            state=0; s.clear(); fail();
-        }
-        else {
-          state=0; TOKENS.push_back(make_pair(2,s)); s.clear(); retract();
+        else  {
+            state=0; s.clear(); retract(); erro();
         }
       }break;
 
       case 8: //string
       {
+        int temp3 = int(buffer[cont]);
         getNextChar();
-        if (s.size()==3) {
-          s.clear(); retract(); erro(); state=0; 
-        }
+        if (buffer[cont]=='"') {
+            TOKENS.push_back(make_pair(1,s));
+            state=0;
+          }
         else {
-          if(buffer[cont] != '"') {
-            s.push_back(buffer[cont]);
-            state=8;
+          if (s.size()==3) {
+            if (temp3==10) {
+              linha--; coluna= last; s.clear(); state=0; 
+              erro(); last=0; linha++; coluna=1;
+            }
+            else {
+              s.clear(); retract(); erro(); state=0;
+            }    
           }
           else {
-            TOKENS.push_back(make_pair(1,s));
-          }
-        }
-        
-      }break;
+              if (cont < buffer.size()) {
+                  verificaLinha();
+                  s.push_back(buffer[cont]);
+                  state=8;
+              }
+              else {
+                if (temp3==10) {
+                    linha--; coluna= last; s.clear(); state=0; 
+                    erro(); last=0; linha++; coluna=1;
+                  }
+                else {
+                   s.clear(); state = 0; erro();
+                  }        
+                }
+              }
+            }
+        }break;
+      }
+    }
     }
   } 
-  for(it=TOKENS.begin();it != TOKENS.end();it++) {
-    pair <int,string> p = *it;
-    cout<< (*it).first<<" "<<(*it).second<<" "; 
-    } 
-    cout << endl;
+  if (bug==0 && ok== false)
+    cout<<"OK"<<endl;
+  //cout<<endl;
 }
